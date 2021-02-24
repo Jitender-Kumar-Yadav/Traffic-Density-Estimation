@@ -48,6 +48,15 @@ int main(int argc, char* argv[])
 	}
 	input_image_path = "./images/" + input_image_name + ".jpg";
 	
+	input_img = imread(input_image_path);    // read the input image
+	while (input_img.empty()) {
+		cout << "The requested file was not found." << endl;
+		cout << "Please enter the name of the image file to be transformed and cropped again: ";
+		cin >> input_image_name;    // input the name of the file from the user
+		input_image_path = "./images/" + input_image_name + ".jpg";
+		input_img = imread(input_image_path);    // read the input image
+	}
+	
 	if(argc < 3) {
 		cout << "Enter a name (without extension) for the output file after being cropped: ";
 		cin >> output_image_name;    // input the name of the output file from the user
@@ -58,11 +67,7 @@ int main(int argc, char* argv[])
 	output_image_path = "./out_images/cropped_" + input_image_name + ".jpg";
 	transformed_image_path = "./out_images/projected_" + input_image_name + ".jpg";
 	
-	input_img = imread(input_image_path);    // read the input image
-	if (input_img.empty()) {
-		cout << "The requested file was not found." << endl;
-		return -1;    // terminate the program
-	}
+	
 	
 	resize(input_img, view_img, Size(1024, 576));    // resize the image to match screen resolution
 	namedWindow("Input window", 1);    // open a window
