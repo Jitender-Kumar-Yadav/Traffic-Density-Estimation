@@ -8,7 +8,7 @@ using namespace cv;
 string video_name, video_path;
 vector<Point2f> pts_src, pts_dest;
 vector<int> queue_car, dynamic_car;
-Mat homo, frame_curr, frame_next, frame;
+Mat homo, frame_curr, frame_next, frame, inter;
 
 void mouseCallBack(int event, int x, int y, int flags, void* userdata)
 {
@@ -49,41 +49,33 @@ Mat correction_crop(Mat frame){
 	return cropped_img;
 }
 
-// Function to get number of contours which can represent a vehicle in a frame
 int get_counters(Mat gray_frame) {
+	// Function to get number of contours which can represent a vehicle in a frame
 	vector<vector<Point> > contours;
     vector<Vec4i> hierarchy;
     findContours( gray_frame, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE );	// get the list of contours
-
     int count_contours = 0;
-
     for (auto contour: contours) {
-    	if (contourArea(contour) >= 25) { 		// if area of contour > limit, then, it represents vehicle
+    	if (contourArea(contour) >= 25){							// if area of contour > limit, then, it represents vehicle
     		count_contours += 1;
     	}
     }
-
     return count_contours;
 }
 
-int queueDensity(Mat frame) {
+int queueDensity(Mat frame, Mat f) {
 	Mat gray_frame, kernel = Mat(3,3,CV_8UC1,1);
-	cvtColor(frame, gray_frame, COLOR_RGBA2GRAY);	// convert rgb frame to gray
-
-	dilate(gray_frame, gray_frame, kernel);		// dilate the image
-	
+	cvtColor(frame, gray_frame, COLOR_RGBA2GRAY);					// convert rgb frame to gray
+	dilate(gray_frame, gray_frame, kernel);							// dilate the image
 	return get_counters(gray_frame);
 } 
 
-int dynamicDensity(Mat frame, Mat frame_next) {
+int dynamicDensity(Mat frame, Mat frame_next, Mat f) {
 	Mat gray_frame, gray_frame_next, diff_frame, kernel = Mat(3,3,CV_8UC1,1);
 	cvtColor(frame, gray_frame, COLOR_RGBA2GRAY);
-	cvtColor(frame_next, gray_frame_next, COLOR_RGBA2GRAY);		// convert rgb frame to gray
-
-	absdiff(gray_frame_next, gray_frame, diff_frame);		// get the difference between frames
-
-	dilate(diff_frame, diff_frame, kernel);		// dilate the image
-
+	cvtColor(frame_next, gray_frame_next, COLOR_RGBA2GRAY);			// convert rgb frame to gray
+	absdiff(gray_frame_next, gray_frame, diff_frame);				// get the difference between frames
+	dilate(diff_frame, diff_frame, kernel);							// dilate the image
 	return get_counters(diff_frame);
 }
 
@@ -109,18 +101,20 @@ int main(int argc, char* argv[]){
 		VideoCapture cap(video_path);
 	}
 	
-	cap >> frame;														// capture first frame
+	cap >> frame;													// capture first frame
 	if(frame.empty()){
 		cout << "The video was empty.";
 		return 1;	
 	}
-	frame_curr = correction_crop(frame);								// frame correction
+	resize(frame, inter, Size(1024, 576));
+	frame_curr = correction_crop(inter);							// frame correction
 	while(true){
-		queue_car.push_back(queueDensity(frame_curr));						// store the static density of the frame
+		queue_car.push_back(queueDensity(frame_curr, frame));		// store the static density of the frame
 		cap >> frame;
 		if(frame.empty()) break;
-		frame_next = correction_crop(frame);							// frame correction
-		dynamic_car.push_back(dynamicDensity(frame_curr, frame_next));					// store the dynamic density of the frames
-		frame_curr = frame_next;										// move to next frame
+		resize(frame, inter, Size(1024, 576));
+		frame_next = correction_crop(inter);						// frame correction
+		dynamic_car.push_back(dynamicDensity(frame_curr, frame_next, frame));	// store the dynamic density of the frames
+		frame_curr = frame_next;									// move to next frame
 	}
 }
