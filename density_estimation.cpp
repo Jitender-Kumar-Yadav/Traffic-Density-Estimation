@@ -39,17 +39,17 @@ void genHomograph(string emptyFile){
 	waitKey(0);
 }
 
-Mat correction_crop(Mat frame){
+Mat correction_crop(Mat frame, Mat f){
 	// warp source image to destination based on homography
 	Mat output_img;
-	warpPerspective(frame, output_img, homo, frame.size());
+	warpPerspective(frame, output_img, homo, f.size());
 	// crop the image
 	Rect crop(472,52,328,788);
 	Mat cropped_img = output_img(crop);
 	return cropped_img;
 }
 
-int get_counters(Mat gray_frame) {
+int getCounters(Mat gray_frame) {
 	// Function to get number of contours which can represent a vehicle in a frame
 	vector<vector<Point> > contours;
     vector<Vec4i> hierarchy;
@@ -63,20 +63,20 @@ int get_counters(Mat gray_frame) {
     return count_contours;
 }
 
-int queueDensity(Mat frame, Mat f) {
+int queueDensity(Mat frame) {
 	Mat gray_frame, kernel = Mat(3,3,CV_8UC1,1);
 	cvtColor(frame, gray_frame, COLOR_RGBA2GRAY);					// convert rgb frame to gray
 	dilate(gray_frame, gray_frame, kernel);							// dilate the image
-	return get_counters(gray_frame);
+	return getCounters(gray_frame);
 } 
 
-int dynamicDensity(Mat frame, Mat frame_next, Mat f) {
+int dynamicDensity(Mat frame, Mat frame_next) {
 	Mat gray_frame, gray_frame_next, diff_frame, kernel = Mat(3,3,CV_8UC1,1);
 	cvtColor(frame, gray_frame, COLOR_RGBA2GRAY);
 	cvtColor(frame_next, gray_frame_next, COLOR_RGBA2GRAY);			// convert rgb frame to gray
 	absdiff(gray_frame_next, gray_frame, diff_frame);				// get the difference between frames
 	dilate(diff_frame, diff_frame, kernel);							// dilate the image
-	return get_counters(diff_frame);
+	return getCounters(diff_frame);
 }
 
 int main(int argc, char* argv[]){
@@ -85,36 +85,44 @@ int main(int argc, char* argv[]){
 	
 	// input the name if 
 	if (argc == 1){
-		cout << "Enter the name of the video to estimate density of traffic: ";
+		cout << "Enter the name of the video to estimate density of traffic with extension: ";
 		cin >> video_name;											// input the name and address of the video from the user
 	}
 	else video_name = argv[1];
-	video_path = "./images/" + video_name + ".jpg";
+	video_path = "./images/" + video_name;
 	VideoCapture cap(video_path);
 	
 	while(!cap.isOpened()){
 		// keep taking the imput till a video path is valid and runnable
 		cout << "The video could not be opened, please use a different path." << endl;
-		cout << "Enter the name of the video to estimate density of traffic: ";
+		cout << "Enter the name of the video to estimate density of traffic with extension: ";
 		cin >> video_name;											// input the name and address of the video from the user
 		video_path = "./images/" + video_name + ".jpg";
 		VideoCapture cap(video_path);
 	}
 	
+	// extracting the density
+	fstream output;
+	output.open("./out_images/out.txt", ios::out);
+	int count = 0;
 	cap >> frame;													// capture first frame
 	if(frame.empty()){
 		cout << "The video was empty.";
-		return 1;	
+		return 1;
 	}
 	resize(frame, inter, Size(1024, 576));
-	frame_curr = correction_crop(inter);							// frame correction
+	frame_curr = correction_crop(inter, frame);							// frame correction
 	while(true){
-		queue_car.push_back(queueDensity(frame_curr, frame));		// store the static density of the frame
+		count = count + 1;
+		queue_car.push_back(queueDensity(frame_curr));				// store the static density of the frame
 		cap >> frame;
 		if(frame.empty()) break;
 		resize(frame, inter, Size(1024, 576));
-		frame_next = correction_crop(inter);						// frame correction
-		dynamic_car.push_back(dynamicDensity(frame_curr, frame_next, frame));	// store the dynamic density of the frames
+		frame_next = correction_crop(inter, frame);						// frame correction
+		dynamic_car.push_back(dynamicDensity(frame_curr, frame_next));	// store the dynamic density of the frames
 		frame_curr = frame_next;									// move to next frame
+		cout << count << ", " << queue_car[count - 1] << ", " << dynamic_car[count - 1] << endl;
+		output << count << ", " << queue_car[count - 1] << ", " << dynamic_car[count - 1] << endl;
 	}
+	output.close();
 }
