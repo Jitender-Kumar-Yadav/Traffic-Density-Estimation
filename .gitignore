@@ -1,2 +1,3 @@
 *.out
 images/*.mp4
+out_images/*
