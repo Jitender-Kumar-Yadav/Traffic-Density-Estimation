@@ -1,14 +1,16 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <vector>
+#include <fstream>
 
 using namespace std;
 using namespace cv;
 
 string video_name, video_path;
-vector<Point2f> pts_src, pts_dest;
+vector<Point2f> pts_src , pts_dest;
 vector<int> queue_car, dynamic_car;
-Mat homo, frame_curr, frame_next, frame, inter;
+Mat homo, frame_curr, frame_next, frame, inter, fgmask, empty;
+Ptr<BackgroundSubtractor> pBackSub;
 
 void mouseCallBack(int event, int x, int y, int flags, void* userdata)
 {
@@ -49,35 +51,69 @@ Mat correction_crop(Mat frame, Mat f){
 	return cropped_img;
 }
 
-int getCounters(Mat gray_frame) {
+int getContours(Mat gray_frame) {
 	// Function to get number of contours which can represent a vehicle in a frame
 	vector<vector<Point> > contours;
     vector<Vec4i> hierarchy;
     findContours( gray_frame, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE );	// get the list of contours
     int count_contours = 0;
     for (auto contour: contours) {
-    	if (contourArea(contour) >= 25){							// if area of contour > limit, then, it represents vehicle
+    	if (contourArea(contour) >= 1000){							// if area of contour > limit, then, it represents vehicle
     		count_contours += 1;
     	}
     }
     return count_contours;
 }
 
+Mat process_queue(Mat frame) {
+	Mat gray_frame, img_thresh;
+	Mat structuringElement2x2 = getStructuringElement(MORPH_RECT, cv::Size(2, 2));
+	cvtColor(frame, gray_frame, COLOR_RGBA2GRAY);
+	GaussianBlur(gray_frame, gray_frame, Size(3, 3), 0);
+	threshold(gray_frame, img_thresh, 150, 255.0, THRESH_BINARY);
+	dilate(img_thresh, img_thresh, structuringElement2x2);
+	return img_thresh;
+}
+
 int queueDensity(Mat frame) {
-	Mat gray_frame, kernel = Mat(3,3,CV_8UC1,1);
-	cvtColor(frame, gray_frame, COLOR_RGBA2GRAY);					// convert rgb frame to gray
-	dilate(gray_frame, gray_frame, kernel);							// dilate the image
-	return getCounters(gray_frame);
+	Mat gray_frame, img_thresh;
+	Mat structuringElement2x2 = getStructuringElement(MORPH_RECT, cv::Size(2, 2));
+	cvtColor(frame, gray_frame, COLOR_RGBA2GRAY);
+	GaussianBlur(gray_frame, gray_frame, Size(3, 3), 0);
+	threshold(gray_frame, img_thresh, 150, 255.0, THRESH_BINARY);
+	dilate(img_thresh, img_thresh, structuringElement2x2);
+	return getContours(img_thresh);
 } 
 
-int dynamicDensity(Mat frame, Mat frame_next) {
-	Mat gray_frame, gray_frame_next, diff_frame, kernel = Mat(3,3,CV_8UC1,1);
+Mat process_dynamic(Mat frame, Mat frame_next) {
+	Mat gray_frame, gray_frame_next, diff_frame, img_thresh;
 	cvtColor(frame, gray_frame, COLOR_RGBA2GRAY);
-	cvtColor(frame_next, gray_frame_next, COLOR_RGBA2GRAY);			// convert rgb frame to gray
-	absdiff(gray_frame_next, gray_frame, diff_frame);				// get the difference between frames
-	dilate(diff_frame, diff_frame, kernel);							// dilate the image
-	return getCounters(diff_frame);
+	cvtColor(frame_next, gray_frame_next, COLOR_RGBA2GRAY);
+
+	GaussianBlur(gray_frame, gray_frame, Size(3, 3), 0);
+	GaussianBlur(gray_frame_next, gray_frame_next, Size(3, 3), 0);
+
+	absdiff(gray_frame, gray_frame_next, diff_frame);
+
+	threshold(diff_frame, img_thresh, 16, 255.0, THRESH_BINARY);
+
+	Mat structuringElement2x2 = getStructuringElement(MORPH_RECT, cv::Size(2, 2));
+
+	dilate(img_thresh, img_thresh, structuringElement2x2);
+	dilate(img_thresh, img_thresh, structuringElement2x2);
+	dilate(img_thresh, img_thresh, structuringElement2x2);
+	
+	return img_thresh;
 }
+
+int dynamicDensity(Mat frame, Mat frame_next) {
+	Mat img = process_dynamic(frame, frame_next);
+	return getContours(img);
+}
+
+
+
+
 
 int main(int argc, char* argv[]){
 	// generate the homograph matrix to project and crop each image
@@ -89,7 +125,7 @@ int main(int argc, char* argv[]){
 		cin >> video_name;											// input the name and address of the video from the user
 	}
 	else video_name = argv[1];
-	video_path = "./images/" + video_name;
+	video_path = "./images/" + video_name + ".mp4"; 
 	VideoCapture cap(video_path);
 	
 	while(!cap.isOpened()){
@@ -97,9 +133,10 @@ int main(int argc, char* argv[]){
 		cout << "The video could not be opened, please use a different path." << endl;
 		cout << "Enter the name of the video to estimate density of traffic with extension: ";
 		cin >> video_name;											// input the name and address of the video from the user
-		video_path = "./images/" + video_name + ".jpg";
+		video_path = "./images/" + video_name + ".mp4";
 		VideoCapture cap(video_path);
 	}
+
 	
 	// extracting the density
 	fstream output;
@@ -110,18 +147,37 @@ int main(int argc, char* argv[]){
 		cout << "The video was empty.";
 		return 1;
 	}
+
+	cap.set(CAP_PROP_POS_FRAMES, 2210);
+	cap >> empty;
+	resize(empty, inter, Size(1024, 576));
+	empty = correction_crop(inter, empty);
+
+	imshow("haha", empty);
+	waitKey(0);
+	cap.set(CAP_PROP_POS_FRAMES, 0);
+	cap >> frame;
+
 	resize(frame, inter, Size(1024, 576));
 	frame_curr = correction_crop(inter, frame);							// frame correction
+
+	pBackSub = createBackgroundSubtractorMOG2();
 	while(true){
+
+		// pBackSub->apply(frame_curr, fgmask);
+		
 		count = count + 1;
-		queue_car.push_back(queueDensity(frame_curr));				// store the static density of the frame
+		queue_car.push_back(dynamicDensity(frame_curr, empty));				// store the static density of the frame
 		cap >> frame;
 		if(frame.empty()) break;
 		resize(frame, inter, Size(1024, 576));
 		frame_next = correction_crop(inter, frame);						// frame correction
+		/*Mat img = process_dynamic(frame_curr, frame_next);
+		imshow("haha", img);*/
+		if (waitKey(10)==27) break;
 		dynamic_car.push_back(dynamicDensity(frame_curr, frame_next));	// store the dynamic density of the frames
 		frame_curr = frame_next;									// move to next frame
-		cout << count << ", " << queue_car[count - 1] << ", " << dynamic_car[count - 1] << endl;
+		// cout << count << ", " << queue_car[count - 1] << ", " << dynamic_car[count - 1] << endl;
 		output << count << ", " << queue_car[count - 1] << ", " << dynamic_car[count - 1] << endl;
 	}
 	output.close();
