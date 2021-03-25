@@ -1,10 +1,12 @@
 #include <opencv2/opencv.hpp>
 #include <iostream>
+#include <chrono>
 #include <vector>
 #include <fstream>
 
 using namespace std;
 using namespace cv;
+using namespace std::chrono;
 
 string video_name, video_path;
 vector<Point2f> pts_src , pts_dest;
@@ -81,6 +83,94 @@ float dynamicDensity(Mat frame, Mat frame_next) {
 }
 
 
+float getUtility(vector<float> &baseline, vector<float> &new_data) {
+	assert(baseline.size() == new_data.size());
+	float error = 0;
+	for (int i=0; i<baseline.size(); i++) {
+		error += (baseline[i] - new_data[i])*(baseline[i] - new_data[i]);
+	}
+	return error/new_data.size();
+}
+
+vector<float> process_frames(VideoCapture cap, int sub_sample_param, int res_X, int res_Y) {
+	// extracting the density
+	fstream output;
+	output.open("./out_images/out.txt", ios::out);
+	int count = 0;
+	cap >> frame;													// capture first frame
+	if(frame.empty()){
+		cout << "The video was empty.";
+		return {};
+	}
+	
+	cap.set(CAP_PROP_POS_FRAMES, 2210);
+	cap >> empty;
+	resize(empty, inter, Size(1024, 576));
+	empty = correction_crop(inter, empty);
+	resize(empty, empty, Size(res_X, res_Y));
+	
+	cap.set(CAP_PROP_POS_FRAMES, 0);
+	cap >> frame;
+	resize(frame, inter, Size(1024, 576));
+	frame_curr = correction_crop(inter, frame);						// frame correction
+	resize(frame_curr, frame_curr, Size(res_X, res_Y));
+	
+	
+	int sub_sample = 0;
+	float current_res;
+	while(true) {
+		count = count + 1;
+		if (sub_sample == 0) {
+			current_res = dynamicDensity(frame_curr, empty)/(float)7;
+			queue_car.push_back(current_res);		// store the static density of the frame
+			sub_sample += 1;
+		}
+		else {
+			queue_car.push_back(current_res);
+			sub_sample += 1;
+		}
+		if (sub_sample == sub_sample_param) {
+			sub_sample = 0;
+		}
+		
+		cap >> frame;
+		if(frame.empty()) break;
+		resize(frame, inter, Size(1024, 576));
+		frame_next = correction_crop(inter, frame);					// frame correction
+		resize(frame_next, frame_next, Size(res_X, res_Y));
+
+		if (waitKey(10)==27) break;
+		// dynamic_car.push_back(dynamicDensity(frame_curr, frame_next)/(float)11);	// store the dynamic density of the frames
+		frame_curr = frame_next;									// move to next frame
+		// cout << count << ", " << queue_car[count - 1] << ", " << dynamic_car[count - 1] << endl;
+		// output << count << ", " << queue_car[count - 1] << ", " << dynamic_car[count - 1] << endl;
+		// output << count << ", " << queue_car[count-1] << ", " << 0 << endl;
+	}
+	output.close();
+	return queue_car;
+}
+
+
+void method1(VideoCapture cap, int sub_sample_param) {
+	vector<float> base_line = process_frames(cap, 1, 1024, 576);
+	vector<float> utility, exec_time;
+	for (int i=1; i<=sub_sample_param; i++) {
+		queue_car.erase(queue_car.begin(), queue_car.end());
+
+		auto start = high_resolution_clock::now();
+		vector<float> new_data = process_frames(cap, i, 1024, 576);
+		auto stop = high_resolution_clock::now();
+		auto duration = duration_cast<microseconds>(stop - start);
+		float utility_val = getUtility(base_line, new_data);
+		exec_time.push_back(duration.count());
+		utility.push_back(utility_val);
+	}
+
+}
+
+
+
+
 // main code starts here
 
 int main(int argc, char* argv[]){
@@ -105,40 +195,6 @@ int main(int argc, char* argv[]){
 		VideoCapture cap(video_path);
 	}
 
+	process_frames(cap, 1, 1024, 576);
 	
-	// extracting the density
-	fstream output;
-	output.open("./out_images/out.txt", ios::out);
-	int count = 0;
-	cap >> frame;													// capture first frame
-	if(frame.empty()){
-		cout << "The video was empty.";
-		return 1;
-	}
-	
-	cap.set(CAP_PROP_POS_FRAMES, 2210);
-	cap >> empty;
-	resize(empty, inter, Size(1024, 576));
-	empty = correction_crop(inter, empty);
-	
-	cap.set(CAP_PROP_POS_FRAMES, 0);
-	cap >> frame;
-	resize(frame, inter, Size(1024, 576));
-	frame_curr = correction_crop(inter, frame);						// frame correction
-	
-	pBackSub = createBackgroundSubtractorMOG2();
-	while(true){
-		count = count + 1;
-		queue_car.push_back(dynamicDensity(frame_curr, empty)/(float)7);		// store the static density of the frame
-		cap >> frame;
-		if(frame.empty()) break;
-		resize(frame, inter, Size(1024, 576));
-		frame_next = correction_crop(inter, frame);					// frame correction
-		if (waitKey(10)==27) break;
-		dynamic_car.push_back(dynamicDensity(frame_curr, frame_next)/(float)11);	// store the dynamic density of the frames
-		frame_curr = frame_next;									// move to next frame
-		cout << count << ", " << queue_car[count - 1] << ", " << dynamic_car[count - 1] << endl;
-		output << count << ", " << queue_car[count - 1] << ", " << dynamic_car[count - 1] << endl;
-	}
-	output.close();
 }
