@@ -1,175 +1,6 @@
-#include <opencv2/opencv.hpp>
-#include <iostream>
-#include <chrono>
-#include <vector>
-#include <fstream>
-
-using namespace std;
-using namespace cv;
-using namespace std::chrono;
+#include "functions.h"
 
 string video_name, video_path;
-vector<Point2f> pts_src , pts_dest;
-vector<float> queue_car, dynamic_car;
-Mat homo, frame_curr, frame_next, frame, inter, fgmask, empty;
-Ptr<BackgroundSubtractor> pBackSub;
-
-void mouseCallBack(int event, int x, int y, int flags, void* userdata)
-{
-	if (event == EVENT_LBUTTONDOWN) {
-		if (pts_src.size() < 4) {
-			cout << "You selected point " << pts_src.size()+1 << " as " << x << " " << y << endl;
-			pts_src.push_back(Point2f(x,y));
-			if (pts_src.size() == 4) {
-				pts_dest = {Point2f(472,52), Point2f(472,830), Point2f(800,830), Point2f(800,52)};				
-				homo = findHomography(pts_src, pts_dest);			// generate Homography matrix
-				destroyWindow("Point Selection");
-			}
-			else{
-				cout << "Please select next point." << endl;
-			}
-		}
-	}
-}
-
-void genHomograph(string emptyFile){
-	Mat input_img = imread(emptyFile);								//open an image of the empty road
-	Mat view_img;
-	resize(input_img, view_img, Size(1024, 576));					//resize the image to be shown
-	namedWindow("Point Selection", 1);								// open a window
-	setMouseCallback("Point Selection", mouseCallBack, NULL);		// allow selection of the points
-	imshow("Point Selection", view_img);							// open the image in the required window
-	cout << "Please select first point." << endl;
-	waitKey(0);
-}
-
-Mat correction_crop(Mat frame, Mat f){
-	// warp source image to destination based on homography
-	Mat output_img;
-	warpPerspective(frame, output_img, homo, f.size());
-	// crop the image
-	Rect crop(472,52,328,788);
-	Mat cropped_img = output_img(crop);
-	return cropped_img;
-}
-
-int getContours(Mat gray_frame) {
-	// Function to get number of contours which can represent a vehicle in a frame
-	vector<vector<Point> > contours;
-    vector<Vec4i> hierarchy;
-    findContours( gray_frame, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE );	// get the list of contours
-    int count_contours = 0;
-    for (auto contour: contours) {
-    	if (contourArea(contour) >= 1000){							// if area of contour > limit, then, it represents a vehicle
-    		count_contours += 1;
-    	}
-    }
-    return count_contours;
-}
-
-float dynamicDensity(Mat frame, Mat frame_next) {
-	Mat gray_frame, gray_frame_next, diff_frame, img_thresh;
-	cvtColor(frame, gray_frame, COLOR_RGBA2GRAY);
-	cvtColor(frame_next, gray_frame_next, COLOR_RGBA2GRAY);
-	GaussianBlur(gray_frame, gray_frame, Size(3, 3), 0);
-	GaussianBlur(gray_frame_next, gray_frame_next, Size(3, 3), 0);
-	absdiff(gray_frame, gray_frame_next, diff_frame);
-	threshold(diff_frame, img_thresh, 16, 255.0, THRESH_BINARY);
-	Mat structuringElement2x2 = getStructuringElement(MORPH_RECT, cv::Size(2, 2));
-	dilate(img_thresh, img_thresh, structuringElement2x2);
-	dilate(img_thresh, img_thresh, structuringElement2x2);
-	dilate(img_thresh, img_thresh, structuringElement2x2);
-	return getContours(img_thresh);
-}
-
-
-float getUtility(vector<float> &baseline, vector<float> &new_data) {
-	assert(baseline.size() == new_data.size());
-	float error = 0;
-	for (int i=0; i<baseline.size(); i++) {
-		error += (baseline[i] - new_data[i])*(baseline[i] - new_data[i]);
-	}
-	return error/new_data.size();
-}
-
-vector<float> process_frames(VideoCapture cap, int sub_sample_param, int res_X, int res_Y) {
-	// extracting the density
-	fstream output;
-	output.open("./out_images/out.txt", ios::out);
-	int count = 0;
-	cap >> frame;													// capture first frame
-	if(frame.empty()){
-		cout << "The video was empty.";
-		return {};
-	}
-	
-	cap.set(CAP_PROP_POS_FRAMES, 2210);
-	cap >> empty;
-	resize(empty, inter, Size(1024, 576));
-	empty = correction_crop(inter, empty);
-	resize(empty, empty, Size(res_X, res_Y));
-	
-	cap.set(CAP_PROP_POS_FRAMES, 0);
-	cap >> frame;
-	resize(frame, inter, Size(1024, 576));
-	frame_curr = correction_crop(inter, frame);						// frame correction
-	resize(frame_curr, frame_curr, Size(res_X, res_Y));
-	
-	
-	int sub_sample = 0;
-	float current_res;
-	while(true) {
-		count = count + 1;
-		if (sub_sample == 0) {
-			current_res = dynamicDensity(frame_curr, empty)/(float)7;
-			queue_car.push_back(current_res);		// store the static density of the frame
-			sub_sample += 1;
-		}
-		else {
-			queue_car.push_back(current_res);
-			sub_sample += 1;
-		}
-		if (sub_sample == sub_sample_param) {
-			sub_sample = 0;
-		}
-		
-		cap >> frame;
-		if(frame.empty()) break;
-		resize(frame, inter, Size(1024, 576));
-		frame_next = correction_crop(inter, frame);					// frame correction
-		resize(frame_next, frame_next, Size(res_X, res_Y));
-
-		if (waitKey(10)==27) break;
-		// dynamic_car.push_back(dynamicDensity(frame_curr, frame_next)/(float)11);	// store the dynamic density of the frames
-		frame_curr = frame_next;									// move to next frame
-		// cout << count << ", " << queue_car[count - 1] << ", " << dynamic_car[count - 1] << endl;
-		// output << count << ", " << queue_car[count - 1] << ", " << dynamic_car[count - 1] << endl;
-		// output << count << ", " << queue_car[count-1] << ", " << 0 << endl;
-	}
-	output.close();
-	return queue_car;
-}
-
-
-void method1(VideoCapture cap, int sub_sample_param) {
-	vector<float> base_line = process_frames(cap, 1, 1024, 576);
-	vector<float> utility, exec_time;
-	for (int i=1; i<=sub_sample_param; i++) {
-		queue_car.erase(queue_car.begin(), queue_car.end());
-
-		auto start = high_resolution_clock::now();
-		vector<float> new_data = process_frames(cap, i, 1024, 576);
-		auto stop = high_resolution_clock::now();
-		auto duration = duration_cast<microseconds>(stop - start);
-		float utility_val = getUtility(base_line, new_data);
-		exec_time.push_back(duration.count());
-		utility.push_back(utility_val);
-	}
-
-}
-
-
-
 
 // main code starts here
 
@@ -177,7 +8,7 @@ int main(int argc, char* argv[]){
 	// generate the homograph matrix to project and crop each image
 	genHomograph("./images/empty.jpg");
 	
-	// input the name if 
+	// input the name if not entered already
 	if (argc == 1){
 		cout << "Enter the name of the video to estimate density of traffic: ";
 		cin >> video_name;											// input the name and address of the video from the user
@@ -194,7 +25,5 @@ int main(int argc, char* argv[]){
 		video_path = "./images/" + video_name + ".mp4";
 		VideoCapture cap(video_path);
 	}
-
-	process_frames(cap, 1, 1024, 576);
-	
+	process_frames(cap, 1, 1024, 576, true, true, "out");
 }
