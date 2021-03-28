@@ -24,3 +24,14 @@ void method1(VideoCapture cap, int sub_sample_param) {
 	exec_time.push_back(duration.count());
 	utility.push_back(utility_val);
 }
+
+
+
+
+
+// main code starts here
+
+int main(int argc, char* argv[])
+{
+	
+}
