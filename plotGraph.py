@@ -6,13 +6,13 @@ def movingaverage(interval, window_size):
     return numpy.convolve(interval, window, 'same')
     pass
 
-file = "./out_images/out.txt"
+file = "./out_images/out1.txt"
 frame = []
 static = []
 dynamic = []
 f = open(file)
 for line in f:
-    tup = line.split(", ")
+    tup = line.split(",")
     frame.append(int(tup[0])/15)
     static.append(float(tup[1]))
     dynamic.append(float(tup[2])/2)

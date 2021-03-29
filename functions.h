@@ -10,7 +10,7 @@ using namespace cv;
 
 vector<Point2f> pts_src, pts_dest;
 Mat homo, input_img, view_img, output_img, proj_img, crop_img;
-Mat frame_curr, frame_next, frame, inter, fgmask, empty;
+
 Ptr<BackgroundSubtractor> pBackSub;
 
 void mouseCallBack(int event, int x, int y, int flags, void* userdata)
@@ -78,6 +78,8 @@ int getContours(Mat gray_frame) {
 }
 
 float dynamicDensity(Mat frame, Mat frame_next) {
+	assert(!frame.empty());
+	assert(!frame_next.empty());
 	Mat gray_frame, gray_frame_next, diff_frame, img_thresh;
 	cvtColor(frame, gray_frame, COLOR_RGBA2GRAY);
 	cvtColor(frame_next, gray_frame_next, COLOR_RGBA2GRAY);
@@ -92,8 +94,9 @@ float dynamicDensity(Mat frame, Mat frame_next) {
 	return getContours(img_thresh);
 }
 
-vector<vector<float>> process_frames(VideoCapture cap, int sub_sample_param, int res_X, int res_Y, bool console_out, bool file_out, string file) {
+vector<vector<float>> process_frames(VideoCapture cap, int sub_sample_param, int res_X, int res_Y, bool console_out, bool file_out, string file, int start_limit, int end_limit) {
 	// extracting the density
+	Mat frame_curr, frame_next, frame, inter, empty;
 	int count = 0;
 	vector<float> queue_car;
 	vector<float> dynamic_car;
@@ -111,7 +114,7 @@ vector<vector<float>> process_frames(VideoCapture cap, int sub_sample_param, int
 	resize(empty, inter, Size(1024, 576));
 	empty = correction_crop(inter, empty);
 	resize(empty, empty, Size(res_X, res_Y));
-	cap.set(CAP_PROP_POS_FRAMES, 0);
+	cap.set(CAP_PROP_POS_FRAMES, start_limit);
 	cap >> frame;
 	resize(frame, inter, Size(1024, 576));
 	frame_curr = correction_crop(inter, frame);						// frame correction
@@ -120,14 +123,16 @@ vector<vector<float>> process_frames(VideoCapture cap, int sub_sample_param, int
 	float current_res, current_res_dynamic;
 	while(true) {
 		count = count + 1;
+		if (cap.get(CAP_PROP_POS_FRAMES) == end_limit) break;
 		cap >> frame;
+		cout << count + start_limit << endl;
 		if(frame.empty()) break;
 		resize(frame, inter, Size(1024, 576));
 		frame_next = correction_crop(inter, frame);					// frame correction
 		resize(frame_next, frame_next, Size(res_X, res_Y));
 		if (sub_sample == 0) {
 			current_res = dynamicDensity(frame_curr, empty)/(float)7.1;
-			current_res_dynamic = dynamicDensity(frame_curr, frame_next)/(float)10.9;
+			// current_res_dynamic = dynamicDensity(frame_curr, frame_next)/(float)10.9;
 			queue_car.push_back(current_res);						// store the static density of the frame
 			dynamic_car.push_back(current_res_dynamic);				// store the dynamic density of the frames
 			sub_sample += 1;

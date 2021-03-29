@@ -25,5 +25,5 @@ int main(int argc, char* argv[]){
 		video_path = "./images/" + video_name + ".mp4";
 		VideoCapture cap(video_path);
 	}
-	process_frames(cap, 1, 1024, 576, true, true, "out");
+	process_frames(cap, 1, 1024, 576, true, true, "out", 0, cap.get(CAP_PROP_FRAME_COUNT));
 }
