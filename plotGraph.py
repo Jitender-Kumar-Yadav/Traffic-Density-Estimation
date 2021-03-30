@@ -6,7 +6,7 @@ def movingaverage(interval, window_size):
     return numpy.convolve(interval, window, 'same')
     pass
 
-file = "./out_images/out1.txt"
+file = "./out_images/out.txt"
 frame = []
 static = []
 dynamic = []

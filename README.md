@@ -19,3 +19,7 @@ density_estimation.cpp:
 	6. Type "make graph" to plot the graph for the points stored in "out.txt".
 	   The graph is stored as "out_graph.png" in the folder "./out_images/"
 	7. Type "make clean" to wipe off the extra generated .out files.
+
+utility_tradeoff.cpp
+	1. The input video should be stored as a ".mp4" file and an image of the empty road as "empty.jpg" in the folder "./images/"
+	2. Type "make utility" on the command line. The file shall be compiled.
