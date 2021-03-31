@@ -11,7 +11,7 @@ for line in f:
     tup = line.split(",")
     parameter.append(int(tup[0]))
     time.append(float(tup[1]))
-    utility.append(100/(1+ float(tup[2])))
+    utility.append(100*(1-float(tup[2])))
 f.close()
 
 #plotting time versus parameter plot

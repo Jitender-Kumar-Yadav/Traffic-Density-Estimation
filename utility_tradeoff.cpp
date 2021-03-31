@@ -1,5 +1,6 @@
 #include <chrono>
 #include <pthread.h>
+#include <cmath>
 #include "functions.h"
 
 using namespace std::chrono;
@@ -13,7 +14,7 @@ struct method4_thread_data
 
 struct method3_thread_data
 {
-	int row_start, row_end;
+	int col_start, col_end;
 	vector<float> output;
 };
 
@@ -23,12 +24,12 @@ string video_name, video_path;
 
 float getUtility(vector<float> &new_data)
 {
-	assert(baseline.size() == new_data.size());
 	float error = 0;
-	for (int i=0; i<baseline.size(); i++) {
-		error += (baseline[i] - new_data[i])*(baseline[i] - new_data[i]);
+	for (int i=0; i<new_data.size(); i++) {
+		float temp = (baseline[i] - new_data[i])/baseline[i];
+		error += temp*temp;
 	}
-	return (error/new_data.size());
+	return sqrt(abs(error/new_data.size()));
 }
 
 pair<float, float> method1(int sub_sample_param)
@@ -69,12 +70,12 @@ void* process_frames_helper_m3(void* arg)
 	method3_thread_data* args_output;
 	args_output = (method3_thread_data*) arg;
 	VideoCapture cap1(video_path);
-	args_output->output = process_frames(cap1, 1, 1024, 576, true, false, "", 0, 1000, args_output->row_start, args_output->row_end)[0];
+	args_output->output = process_frames(cap1, 1, 1024, 576, false, false, "", 0, 1000, args_output->col_start, args_output->col_end)[0];
 	pthread_exit(NULL);
 }
 
 // (ranges[i], ranges[i+1]) determine the range of rows a thread will process
-void method3(vector<int> ranges)
+pair<float, float> method3(vector<int> ranges)
 {
 	int NUM_THREADS = ranges.size() - 1;
 	vector<float> new_data(999);
@@ -90,11 +91,11 @@ void method3(vector<int> ranges)
 	
 	auto start = high_resolution_clock::now();
 	for (int i=0; i<NUM_THREADS; i++) {
-		args_output[i].row_start = ranges[i], args_output[i].row_end = ranges[i+1];
+		args_output[i].col_start = ranges[i], args_output[i].col_end = ranges[i+1];
 		int	rc = pthread_create(&threads[i], &attr, process_frames_helper_m3, (void *)&args_output[i]);
 		if (rc) {
 			cout << "Unable to create thread" << endl;
-			return;
+			return {};
 		}
 	}
 	
@@ -103,28 +104,26 @@ void method3(vector<int> ranges)
 		int rc = pthread_join(threads[i], &status);
 		if (rc) {
 			cout << "Error: Unable to join" << endl;
-			return;
+			return {};
 		}
-		cout << "Thread " << i << " done" << endl;
 	}
 	// All threads are done
 	auto stop = high_resolution_clock::now();
 	auto duration = duration_cast<microseconds>(stop - start);
-	cout << duration.count() << endl;
-	fstream out;
-	out.open("./out_images/out2.txt", ios::out);
+	
 	for (int i=0; i<NUM_THREADS; i++) {
 		for (int j=0; j<args_output[i].output.size(); j++) {
 			new_data[j] += args_output[i].output[j];
 		}
 	}
-	
-	for (int i=0; i<new_data.size(); i++) out << i << "," << new_data[i] << ",1" << endl;
-	out.close();
+	float utility_val = getUtility(new_data);
+	float timer = duration.count()/(float) 1000000;
+	pair<float, float> outval(timer, utility_val);
+	return outval;
 }
 
 // (ranges[i], ranges[i+1]) determine the range of frames a thread will process
-void method4(vector<int> ranges)
+pair<float, float> method4(vector<int> ranges)
 {
 	int NUM_THREADS = ranges.size() - 1, FRAME_COUNT = cap.get(CAP_PROP_FRAME_COUNT);
 	vector<float> new_data(FRAME_COUNT);
@@ -144,7 +143,7 @@ void method4(vector<int> ranges)
 		int	rc = pthread_create(&threads[i], &attr, process_frames_helper, (void *)&args_output[i]);
 		if (rc) {
 			cout << "Unable to create thread" << endl;
-			return;
+			return {};
 		}
 	}
 	
@@ -153,24 +152,32 @@ void method4(vector<int> ranges)
 		int rc = pthread_join(threads[i], &status);
 		if (rc) {
 			cout << "Error: Unable to join" << endl;
-			return;
+			return {};
 		}
-		cout << "Thread " << i << " done" << endl;
 	}
 	// All threads are done
 	auto stop = high_resolution_clock::now();
 	auto duration = duration_cast<microseconds>(stop - start);
-	cout << duration.count() << endl;
-	fstream out;
-	out.open("./out_images/out1.txt", ios::out);
+	
 	for (int i=0; i<NUM_THREADS; i++) {
 		for (int j=0; j<args_output[i].output.size(); j++) {
 			new_data[ranges[i]+j] = args_output[i].output[j];
 		}
 	}
-	
-	for (int i=0; i<new_data.size(); i++) out << i << "," << new_data[i] << ",1" << endl;
-	out.close();
+	float utility_val = getUtility(new_data);
+	float timer = duration.count()/(float) 1000000;
+	pair<float, float> outval(timer, utility_val);
+	return outval;
+}
+
+vector<int> genRange(int method, int numThreads)
+{
+	int maximum = method == 3 ? 1023 : cap.get(CAP_PROP_FRAME_COUNT);
+	vector<int> out;
+	for(int i = 0; i <= numThreads; i++){
+		out.push_back((maximum*i)/numThreads);
+	}
+	return out;
 }
 
 
@@ -186,7 +193,7 @@ int main(int argc, char* argv[])
 	
 	// input the name if not entered already
 	if (argc == 1){
-		cout << "Enter the name of the video to estimate density of traffic: ";
+		cout << "\nEnter the name of the video to estimate density of traffic: ";
 		cin >> video_name;											// input the name and address of the video from the user
 	}
 	else video_name = argv[1];
@@ -196,74 +203,79 @@ int main(int argc, char* argv[])
 	while(!cap.isOpened()){
 		// keep taking the imput till a video path is valid and runnable
 		cout << "The video could not be opened, please use a different path." << endl;
-		cout << "Enter the name of the video to estimate density of traffic: ";
+		cout << "\nEnter the name of the video to estimate density of traffic: ";
 		cin >> video_name;											// input the name and address of the video from the user
 		video_path = "./images/" + video_name + ".mp4";
 		VideoCapture cap(video_path);
 	}
-	vector<vector<float>> base = process_frames(cap, 1, 1024, 576, true, false, "", 0, 1000);
+	
+	cout << "\nGenerating Baseline" << endl;
+	vector<vector<float>> base = process_frames(cap, 1, 1024, 576, false, false, "", 0, cap.get(CAP_PROP_FRAME_COUNT));
 	baseline = base.at(0);
+	cout << "Generated Baseline\n" << endl;
 	
 	int method;
 	if(argc <= 2){
 		cout << "Which method of utility-tradeoff analysis to be implemented? ";
 		cin >> method;
 	}
-	else method = stoi(argv[2]);
+	else{
+		method = stoi(argv[2]);
+	}
+	cout << " " << endl;
 	
-	if(method == 1)
+	while(method != 0)
 	{
-		fstream outFile;
-		outFile.open("./out_images/out_method_1.txt", ios::out);
-		cout << "Starting with X = " << 1 << endl;
-		pair<float, float> out = method1(1);
-		outFile << 1 << ", " << out.first << ", " << out.second << endl;
-		cout << 1 << ", " << out.first << ", " << out.second << endl;
-		cout << "X = " + to_string(1) + " done" << endl;
-		for(int j = 10; j <= 100; j+=10){
-			cout << "Starting with X = " << j << endl;
-			pair<float, float> out = method1(j);
-			outFile << j << ", " << out.first << ", " << out.second << endl;
-			cout << j << ", " << out.first << ", " << out.second << endl;
-			cout << "X = " + to_string(j) + " done" << endl;
+		if(method == 1)
+		{
+			fstream outFile;
+			outFile.open("./out_images/out_method_1.txt", ios::out);
+			cout << "Starting with X = " << 1 << endl;
+			cap = VideoCapture(video_path);
+			pair<float, float> out = method1(1);
+			outFile << 1 << ", " << out.first << ", " << out.second << endl;
+			cout << 1 << ", " << out.first << ", " << out.second << endl;
+			cout << "X = " + to_string(1) + " done" << "\n" << endl;
+			for(int j = 5; j <= 100; j+=5){
+				cout << "Starting with X = " << j << endl;
+				cap = VideoCapture(video_path);
+				pair<float, float> out = method1(j);
+				outFile << j << ", " << out.first << ", " << out.second << endl;
+				cout << j << ", " << out.first << ", " << out.second << endl;
+				cout << "X = " + to_string(j) + " done" << "\n" << endl;
+			}
 		}
+		else if(method == 2)
+		{
+			fstream outFile;
+			outFile.open("./out_images/out_method_2.txt", ios::out);
+			int res_X = 1024, res_Y = 576;
+			for(int j = 1; j <= 10; j++){
+				cout << "Starting with resolution " << res_X << "x" << res_Y << endl;
+				cap = VideoCapture(video_path);
+				pair<float, float> out = method2(res_X, res_Y);
+				outFile << j << ", " << out.first << ", " << out.second << endl;
+				cout << j << ", " << out.first << ", " << out.second << endl;
+				cout << "Resolution " << res_X << "x" << res_Y << " done" << "\n" << endl;
+				res_X = 1024 * (10 - j)/10;
+				res_Y = 576 * (10 - j)/10;
+			}
+		}
+		else if(method == 3 || method == 4)
+		{
+			fstream outFile;
+			outFile.open("./out_images/out_method_" + to_string(method) + ".txt", ios::out);
+			for(int numthreads = 1; numthreads <= 8; numthreads++){
+				cout << "Starting with " << numthreads << " threads" << endl;
+				pair<float, float> out = method == 3 ? method3(genRange(method, numthreads)) : method4(genRange(method, numthreads));
+				outFile << numthreads << ", " << out.first << ", " << out.second << endl;
+				cout << numthreads << ", " << out.first << ", " << out.second << endl;
+				cout << numthreads << " threads done" << "\n" << endl;
+			}
+		}
+		else cout << "Method must be 1 or 2 or 3 or 4 only." << endl;
+		cout << "Enter the method of utility-tradeoff analysis to be implemented, enter 0 to stop (0/1/2/3/4): ";
+		cin >> method;
+		cout << " " << endl;
 	}
-	if(method == 2)
-	{
-		
-	}
-	if(method == 3)
-	{
-		// int  X;
-		// if(argc <= 3){
-			// cout << "Enter the parameter, number of frames to be skipped: ";
-			// cin >> X;
-		// }
-		// else X = argv[3];
-	}
-	if(method == 4)
-	{
-		// int  X;
-		// if(argc <= 3){
-			// cout << "Enter the parameter, number of frames to be skipped: ";
-			// cin >> X;
-		// }
-		// else X = argv[3];
-	}
-	
-	// cout << cap.get(CAP_PROP_FRAME_COUNT) << endl;
-	// vector<int> v = {0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, cap.get(CAP_PROP_FRAME_COUNT)};
-	// vector<int> v1 = {0, cap.get(CAP_PROP_FRAME_COUNT)};
-	// vector<int> v2 = {10, 20, 30, 40, 50};
-	// vector<int> v3 = {10, 50};
-	// // method4(v3);
-	// // method4(v2);
-	// // method4(v1);
-	// method4(v);
-	
-	// vector<int> v1 = {0, 1023};
-	// vector<int> v2 = {0, 511, 1023};
-	// vector<int> v4 = {0, 255, 511, 767, 1023};
-	// vector<int> v8 = {0, 127, 255, 383, 511, 639, 767, 895, 1023};
-	// method3(v8);
 }

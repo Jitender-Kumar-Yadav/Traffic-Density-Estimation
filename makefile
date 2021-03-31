@@ -7,5 +7,8 @@ utility:
 graph:
 	sudo apt-get install python3-matplotlib
 	python3 plotGraph.py
+utilPlot:
+	sudo apt-get install python3-matplotlib
+	python3 plotUtility.py
 clean:
 	rm *.out

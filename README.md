@@ -23,3 +23,10 @@ density_estimation.cpp:
 utility_tradeoff.cpp
 	1. The input video should be stored as a ".mp4" file and an image of the empty road as "empty.jpg" in the folder "./images/"
 	2. Type "make utility" on the command line. The file shall be compiled.
+	3. Type "./utility.out" on the command line to run the file.
+	4. Alternatively type "./utility.out arg1" where arg1 is the name of the video file without extension
+	   or "./utility.out arg1 arg2" where arg2 is the method of utility-tradeoff to be executed.
+	5. The text files shall be stored as "out_method_1.txt", etc. in the folder "./out_images/"
+	6. Type "make utilPlot" to plot the graph for utility-time plots for the stored data.
+	   The graph is stored as "out_graph.png" in the folder "./out_images/"
+	7. Type "make clean" to wipe off the extra generated .out files.
