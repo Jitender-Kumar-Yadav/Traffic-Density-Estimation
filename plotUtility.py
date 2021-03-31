@@ -28,6 +28,20 @@ plt.legend()
 plt.savefig("./out_images/method_" + method + "_time.png")
 plt.close()
 
+#plotting utility versus parameter plot
+plt.plot(parameter, utility, label = "Utility-Parameter Plot", marker='o', color='g')
+if(method == "1"):
+    plt.xlabel("X-parameter, no of frames skipped")
+elif(method == "2"):
+    plt.xlabel("Resolution, XxY")
+elif(method == "3" or method == "4"):
+    plt.xlabel("Number of Threads")
+plt.ylabel("Utility as a percentage")
+plt.title("Utility-Parameter Plot")
+plt.legend()
+plt.savefig("./out_images/method_" + method + "_utility_param.png")
+plt.close()
+
 #plotting utility versus time plot
 plt.plot(time, utility, label = "Utility-Time Tradeoff Plot")
 plt.xlabel("Time in seconds")
