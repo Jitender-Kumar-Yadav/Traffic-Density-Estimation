@@ -115,25 +115,25 @@ vector<vector<float>> process_frames(VideoCapture cap, int sub_sample_param, int
 	empty = correction_crop(inter, empty);
 	resize(empty, empty, Size(res_X, res_Y));
 	Rect crop(row_start,0,row_end - row_start+1,576);
-	empty = empty(crop);
+	if(!(row_start == 0 && row_end == 1023)) empty = empty(crop);
 	cap.set(CAP_PROP_POS_FRAMES, start_limit);
 	cap >> frame;
 	resize(frame, inter, Size(1024, 576));
 	frame_curr = correction_crop(inter, frame);						// frame correction
 	resize(frame_curr, frame_curr, Size(res_X, res_Y));
-	frame_curr = frame_curr(crop);
+	if(!(row_start == 0 && row_end == 1023)) frame_curr = frame_curr(crop);
 	int sub_sample = 0;
 	float current_res, current_res_dynamic;
 	while(true) {
 		count = count + 1;
-		if (cap.get(CAP_PROP_POS_FRAMES) == end_limit) break;
+		if (start_limit + count == end_limit) break;
 		if (sub_sample == 0) {
 			cap >> frame;
 			if(frame.empty()) break;
 			resize(frame, inter, Size(1024, 576));
 			frame_next = correction_crop(inter, frame);				// frame correction
 			resize(frame_next, frame_next, Size(res_X, res_Y));
-			frame_next = frame_next(crop);
+			if(!(row_start == 0 && row_end == 1023)) frame_next = frame_next(crop);
 			current_res = dynamicDensity(frame_curr, empty)/(float)7.1;
 			current_res_dynamic = dynamicDensity(frame_curr, frame_next)/(float)10.9;
 			queue_car.push_back(current_res);						// store the static density of the frame
@@ -146,13 +146,12 @@ vector<vector<float>> process_frames(VideoCapture cap, int sub_sample_param, int
 			sub_sample += 1;
 		}
 		if (sub_sample == sub_sample_param) {
-			if(sub_sample_param != 1) cap.set(CAP_PROP_POS_FRAMES, count + start_limit);
 			cap >> frame;
 			if(frame.empty()) break;
 			resize(frame, inter, Size(1024, 576));
 			frame_next = correction_crop(inter, frame);				// frame correction
 			resize(frame_next, frame_next, Size(res_X, res_Y));
-			frame_next = frame_next(crop);
+			if(!(row_start == 0 && row_end == 1023)) frame_next = frame_next(crop);
 			sub_sample = 0;
 		}
 		if (waitKey(10)==27) break;

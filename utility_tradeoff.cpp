@@ -38,7 +38,7 @@ pair<float, float> method1(int sub_sample_param)
 	auto stop = high_resolution_clock::now();
 	auto duration = duration_cast<microseconds>(stop - start);
 	float utility_val = getUtility(new_data);
-	float timer = duration.count()/1000000;
+	float timer = duration.count()/(float) 1000000;
 	pair<float, float> out(timer, utility_val);
 	return out;
 }
@@ -50,7 +50,7 @@ pair<float, float> method2(int resX, int resY)
 	auto stop = high_resolution_clock::now();
 	auto duration = duration_cast<microseconds>(stop - start);
 	float utility_val = getUtility(new_data);
-	float timer = duration.count()/1000000;
+	float timer = duration.count()/(float) 1000000;
 	pair<float, float> out(timer, utility_val);
 	return out;
 }
@@ -201,8 +201,8 @@ int main(int argc, char* argv[])
 		video_path = "./images/" + video_name + ".mp4";
 		VideoCapture cap(video_path);
 	}
-	// vector<vector<float>> base = process_frames(cap, 1, 1024, 576, false, true, "", 0, 1000);
-	// baseline = base.at(0);
+	vector<vector<float>> base = process_frames(cap, 1, 1024, 576, true, false, "", 0, 1000);
+	baseline = base.at(0);
 	
 	int method;
 	if(argc <= 2){
@@ -213,14 +213,20 @@ int main(int argc, char* argv[])
 	
 	if(method == 1)
 	{
-		// fstream outFile;
-		// outFile.open("./out_images/out_method_1.txt", ios::out);
-		// for(int j = 1; j <= 30; j++){
-			// pair<float, float> out = method1(j);
-			// outFile << j << ", " << out.first << ", " << out.second << endl;
-			// cout << j << ", " << out.first << ", " << out.second << endl;
-			// cout << "X = " + to_string(j) + " done" << endl;
-		// }
+		fstream outFile;
+		outFile.open("./out_images/out_method_1.txt", ios::out);
+		cout << "Starting with X = " << 1 << endl;
+		pair<float, float> out = method1(1);
+		outFile << 1 << ", " << out.first << ", " << out.second << endl;
+		cout << 1 << ", " << out.first << ", " << out.second << endl;
+		cout << "X = " + to_string(1) + " done" << endl;
+		for(int j = 10; j <= 100; j+=10){
+			cout << "Starting with X = " << j << endl;
+			pair<float, float> out = method1(j);
+			outFile << j << ", " << out.first << ", " << out.second << endl;
+			cout << j << ", " << out.first << ", " << out.second << endl;
+			cout << "X = " + to_string(j) + " done" << endl;
+		}
 	}
 	if(method == 2)
 	{
@@ -255,9 +261,9 @@ int main(int argc, char* argv[])
 	// // method4(v1);
 	// method4(v);
 	
-	vector<int> v1 = {0, 1023};
-	vector<int> v2 = {0, 511, 1023};
-	vector<int> v4 = {0, 255, 511, 767, 1023};
-	vector<int> v8 = {0, 127, 255, 383, 511, 639, 767, 895, 1023};
-	method3(v8);
+	// vector<int> v1 = {0, 1023};
+	// vector<int> v2 = {0, 511, 1023};
+	// vector<int> v4 = {0, 255, 511, 767, 1023};
+	// vector<int> v8 = {0, 127, 255, 383, 511, 639, 767, 895, 1023};
+	// method3(v8);
 }
