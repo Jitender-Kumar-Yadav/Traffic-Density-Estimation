@@ -148,12 +148,6 @@ vector<vector<float>> process_frames(VideoCapture cap, int sub_sample_param, int
 			sub_sample += 1;
 		}
 		if (sub_sample == sub_sample_param) {
-			cap >> frame;
-			if(frame.empty()) break;
-			resize(frame, inter, Size(1024, 576));
-			frame_next = correction_crop(inter, frame);				// frame correction
-			resize(frame_next, frame_next, Size(res_X, res_Y));
-			if(!(col_start == 0 && col_end == 1023)) frame_next = frame_next(rows, cols);
 			sub_sample = 0;
 		}
 		if (waitKey(10)==27) break;

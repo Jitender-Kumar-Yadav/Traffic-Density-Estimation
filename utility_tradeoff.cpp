@@ -6,12 +6,14 @@
 using namespace std::chrono;
 using namespace std;
 
+// Structure to hold argument and output for multithreading in part 4
 struct method4_thread_data
 {
 	int start_limit, end_limit;
 	vector<float> output;
 };
 
+// Structure to hold argument and output for multithreading in part 3
 struct method3_thread_data
 {
 	int col_start, col_end;
@@ -22,6 +24,7 @@ vector<float> baseline;
 VideoCapture cap;
 string video_name, video_path;
 
+// Function to compare new output with baseline output
 float getUtility(vector<float> &new_data)
 {
 	float error = 0;
@@ -32,6 +35,12 @@ float getUtility(vector<float> &new_data)
 	return sqrt(abs(error/new_data.size()));
 }
 
+
+/*
+	description - Simulate method 1
+	arg - sub_sample_param :- Number of sub sampling frames
+	output - Utility and execution time
+*/
 pair<float, float> method1(int sub_sample_param)
 {
 	auto start = high_resolution_clock::now();
@@ -44,6 +53,11 @@ pair<float, float> method1(int sub_sample_param)
 	return out;
 }
 
+/*
+	description - Simulate method 2
+	arg - resX, resY :- Cropping parameters
+	output - Utility and execution time
+*/
 pair<float, float> method2(int resX, int resY)
 {
 	auto start = high_resolution_clock::now();
@@ -56,6 +70,9 @@ pair<float, float> method2(int resX, int resY)
 	return out;
 }
 
+/*
+	description - Thread function for multithreading in method 4
+*/
 void* process_frames_helper(void* arg)
 {
 	method4_thread_data* args_output;
@@ -65,6 +82,9 @@ void* process_frames_helper(void* arg)
 	pthread_exit(NULL);
 }
 
+/*
+	description - Thread function for multithreading in method 3
+*/
 void* process_frames_helper_m3(void* arg)
 {
 	method3_thread_data* args_output;
@@ -74,7 +94,11 @@ void* process_frames_helper_m3(void* arg)
 	pthread_exit(NULL);
 }
 
-// (ranges[i], ranges[i+1]) determine the range of rows a thread will process
+/*
+	description - Simulate method 3
+	arg - (ranges[i], ranges[i+1]) denotes the cropping parameters for ith thread
+	output - Utility and execution time
+*/
 pair<float, float> method3(vector<int> ranges)
 {
 	int NUM_THREADS = ranges.size() - 1;
@@ -122,7 +146,11 @@ pair<float, float> method3(vector<int> ranges)
 	return outval;
 }
 
-// (ranges[i], ranges[i+1]) determine the range of frames a thread will process
+/*
+	description - Simulate method 4
+	arg - (ranges[i], ranges[i+1]) denotes the number of frames to be processed by ith thread
+	output - Utility and execution time
+*/
 pair<float, float> method4(vector<int> ranges)
 {
 	int NUM_THREADS = ranges.size() - 1, FRAME_COUNT = cap.get(CAP_PROP_FRAME_COUNT);
@@ -170,6 +198,7 @@ pair<float, float> method4(vector<int> ranges)
 	return outval;
 }
 
+// Function to generate input for method1 and method4
 vector<int> genRange(int method, int numThreads)
 {
 	int maximum = method == 3 ? 1023 : cap.get(CAP_PROP_FRAME_COUNT);
@@ -224,6 +253,7 @@ int main(int argc, char* argv[])
 	}
 	cout << " " << endl;
 	
+	// Input - Output interactions
 	while(method != 0)
 	{
 		if(method == 1)
